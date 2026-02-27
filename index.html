@@ -571,6 +571,7 @@ const BGM_PLAYLIST = [
   "004.ogg"
 ];
 let _bgmIndex = 0;
+let INTRO_ACTIVE = true;
 
 // (keeps audio files outside HTML)
 let _bgm = null;
@@ -716,16 +717,14 @@ function applyMusicLevel(){
   const a = ensureBGM();
   if (a){
     a.volume = MUSIC_VOL;
-    if (MUSIC_ENABLED){
-      a.play().catch(()=>{});
-    }else{
+    if (MUSIC_ENABLED && !INTRO_ACTIVE){ a.play().catch(()=>{}); }else{
       try{ a.pause(); }catch(_){}
     }
   }
 }
 
 function tryStartMusic(){
-  if (!MUSIC_ENABLED) return;
+  if (!MUSIC_ENABLED || INTRO_ACTIVE) return;
   const a = ensureBGM();
   if (!a) return;
   a.volume = MUSIC_VOL;
@@ -871,6 +870,7 @@ function togglePause(){
 function goToMenu(){
   state = { totalCost: 0, totalRideSeconds: 0, lastDistanceAtRoundStart: 0, lastRoundTime: 0, lastRoundDistance: 0, endTimeSec: 0, endDistance: 0 };
   if (biker) { biker.distance = 0; biker.lastX = W/2; }
+  INTRO_ACTIVE = false;
   screenPhase = 'menu';
   updateDiffUI();
   syncMenuDiffHitZones();

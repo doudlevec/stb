@@ -303,7 +303,7 @@ canvas{
       <button class="touchBtn smallBtn" id="btnRestart" title="Menu / restart">↩ R</button>
       <button id="btnSound" class="touchBtn smallBtn" title="Zvuk" aria-pressed="true">🔊 S</button>
   <button id="btnMusic" class="touchBtn smallBtn" title="Hudba" aria-pressed="true">🎵 M</button>
-<button id="btnNextTrack" class="touchBtn smallBtn" title="Další skladba">N&gt;&gt;</button>
+<button id="btnNextTrack" class="touchBtn smallBtn" title="Další skladba">N&gt;</button>
 <button class="touchBtn smallBtn" id="btnFullscreen" title="Celá obrazovka">⛶</button>
 
     </div>
@@ -618,6 +618,56 @@ function nextBGMTrack(){
     a.play().catch(()=>{});
   }
 }
+
+
+function fadeOutAndNextBGM(fadeMs=800){
+  const a = ensureBGM();
+  if (!a){
+    _bgmIndex = (_bgmIndex + 1) % BGM_PLAYLIST.length;
+    return;
+  }
+  // If music is disabled, just advance index so next time it continues in order.
+  if (!MUSIC_ENABLED){
+    _bgmIndex = (_bgmIndex + 1) % BGM_PLAYLIST.length;
+    a.src = BGM_PLAYLIST[_bgmIndex];
+    a.load();
+    return;
+  }
+
+  const startVol = Math.max(0.0001, a.volume || MUSIC_VOL || 0.5);
+  const t0 = performance.now();
+
+  function step(now){
+    const t = (now - t0) / fadeMs;
+    if (t >= 1){
+      a.volume = 0.0001;
+      try{ a.pause(); }catch(_){}
+      _bgmIndex = (_bgmIndex + 1) % BGM_PLAYLIST.length;
+      a.src = BGM_PLAYLIST[_bgmIndex];
+      a.load();
+      a.volume = 0.0001;
+      a.play().then(()=>{
+        const t1 = performance.now();
+        const fadeInMs = 250;
+        function stepIn(n2){
+          const u = (n2 - t1) / fadeInMs;
+          if (u >= 1){
+            a.volume = MUSIC_VOL;
+            return;
+          }
+          a.volume = 0.0001 + (MUSIC_VOL - 0.0001) * u;
+          requestAnimationFrame(stepIn);
+        }
+        requestAnimationFrame(stepIn);
+      }).catch(()=>{});
+      return;
+    }
+    a.volume = startVol * (1 - t);
+    requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
 
 if (btnNextTrack){
   btnNextTrack.addEventListener("click", (e)=>{
@@ -1475,6 +1525,7 @@ function handleWin() {
   state.missedBeers = 0;
   state.boostCount = 30;
   gameWonTime = performance.now();
+  fadeOutAndNextBGM(900);
   screenPhase = 'won';
   // Keep totalCost, start new round after 10s
   state.startTime = performance.now();
@@ -1691,7 +1742,15 @@ function drawHUD() {
   drawText(`Najeto ${biker.distance.toFixed(2)} km`, 24, 20, H/2 - 10 - H*0.30, CLR.white, 'left');
 
   // Cost
-  drawText(`Účet pivovaru: ${state.totalCost} Kč`, 24, 20, H/2 + 15 - H*0.30, CLR.white, 'left');
+  
+  // Cost (make the number more visible)
+  drawText(`Účet pivovaru:`, 24, 20, H/2 + 15 - H*0.30, CLR.white, 'left');
+  ctx.save();
+  ctx.font = `bold 26px Arial`;
+  const wLabel = ctx.measureText(`Účet pivovaru: `).width;
+  ctx.restore();
+  drawText(`${state.totalCost} Kč`, 26, 20 + wLabel, H/2 + 13 - H*0.30, CLR.green, 'left');
+
   drawText('(K záchraně potřeba 25.000 Kč)', 16, 20, H/2 + 40 - H*0.30, CLR.white, 'left');
 
   // Best times

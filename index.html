@@ -782,6 +782,10 @@ applyMusicLevel();
     try{ if (rafId) cancelAnimationFrame(rafId); }catch(e){}
     intro.classList.add("hide");
     if (touchUI) touchUI.style.visibility = "visible";
+    // Start music only after intro is gone (on difficulty/menu screen)
+    INTRO_ACTIVE = false;
+    if (MUSIC_ENABLED) tryStartMusic();
+
     // remove after fade
     setTimeout(()=>{ try{ intro.remove(); }catch(e){} }, 320);
   }

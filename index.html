@@ -1681,7 +1681,7 @@ drawTextShadow('Ale už jsi úplně prošitej. Pokračuj zítra!', 28, W/2, H/2 
     drawTextShadow('Super, chvilku si vydechni a jedeme dál!', 36, W/2, H/2 - 20, CLR.green);
     drawTextShadow(`Už jsi našlapal: ${biker.distance.toFixed(2)} km`, 30, W/2, H/2 + 20, CLR.dblue);
     const sp = calcAvgSpeedKmh(state.lastRoundDistance || 0, state.lastRoundTime || 0);
-    drawTextShadow(`Průměrná rychlost (toto kolo): ${sp.toFixed(1)} km/h`, 24, W/2, H/2 + 60, CLR.white);
+    drawTextShadow(`Průměrná rychlost (tuto kolo): ${sp.toFixed(1)} km/h`, 24, W/2, H/2 + 60, CLR.white);
     drawTextShadow(`${10 - Math.floor(elapsed)}s`, 52, W/2, H/2 + 80, CLR.red);
     if (elapsed >= 10) {
       screenPhase = 'playing';

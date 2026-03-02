@@ -1606,7 +1606,42 @@ function loop(now) {
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
     ctx.fillRect(0, 0, W, H);
     drawTextShadow('Pivovar je zachráněn!', 44, W/2, H/2 - 80, CLR.green);
-    drawTextShadow('Ale už jsi úplně prošitej. Pokračuj zítra!', 28, W/2, H/2 - 20, CLR.white);
+    
+    // Trophy (top-right) + difficulty label
+    (function(){
+      const d = (difficulty ? DIFFICULTY[difficulty] : null);
+      const dLabel = d ? d.label : '';
+      // Trophy sizes by difficulty
+      let trophy = "🏆";
+      let size = 42;
+      if (difficulty === 'hobby') {
+        trophy = "📃";        // diploma
+        size = 44;
+      }
+      else if (difficulty === 'masters') {
+        trophy = "🏅";        // medal
+        size = 48;
+      }
+      else if (difficulty === 'profi') {
+        trophy = "🏆";        // big trophy
+        size = 56;
+      }   // big trophy
+
+      ctx.save();
+      ctx.textAlign = "right";
+      ctx.textBaseline = "top";
+      ctx.font = `bold ${size}px Arial`;
+      ctx.fillStyle = CLR.white;
+      ctx.fillText(trophy, W - 20, 16);
+
+      if (dLabel){
+        ctx.font = `bold 18px Arial`;
+        ctx.fillStyle = CLR.orange;
+        ctx.fillText(dLabel, W - 20, 16 + size + 2);
+      }
+      ctx.restore();
+    })();
+drawTextShadow('Ale už jsi úplně prošitej. Pokračuj zítra!', 28, W/2, H/2 - 20, CLR.white);
     drawTextShadow(`Našlapal jsi: ${biker.distance.toFixed(2)} km`, 32, W/2, H/2 + 20, CLR.dblue);
     if (!state.endTimeSec){
       state.endTimeSec = (state.totalRideSeconds || 0) + getElapsedTime();

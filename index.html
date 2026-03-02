@@ -1477,7 +1477,7 @@ function newGame() {
     lastDistance: 0,
     // Avg speed tracking
     totalRideSeconds: (state && typeof state.totalRideSeconds === 'number') ? state.totalRideSeconds : 0,
-    lastDistanceAtRoundStart: (state && typeof state.lastDistanceAtRoundStart === 'number') ? state.lastDistanceAtRoundStart : 0,
+    lastDistanceAtRoundStart: 0,
     lastRoundTime: 0,
     lastRoundDistance: 0,
     endTimeSec: (state && typeof state.endTimeSec === 'number') ? state.endTimeSec : 0,

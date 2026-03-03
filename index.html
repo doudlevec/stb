@@ -263,11 +263,6 @@ canvas{
 }
 
 </style>
-
-<!-- Firebase (compat) – pro Firestore online TOP10 -->
-<script src="https://www.gstatic.com/firebasejs/12.10.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore-compat.js"></script>
-
 </head>
 <body>
 <div id="gameRoot">
@@ -1616,172 +1611,39 @@ function calcAvgSpeedKmh(distanceKm, timeSec){
 }
 
 // ---------- TOP10 (localStorage) ----------
+function lbKey(type, diff){ return `stb_top10_${type}_${diff}`; }
 
-// ---- Online Leaderboards (Firebase Firestore) ----
-// Tabulky TOP10 se ukládají online do Firestore. Zůstává stejná šířka tabulek, jen přibyl sloupec Nick (max 8).
-// Bez přihlášení (varianta A) – doporučujeme omezit zápis Firestore pravidly na validní hodnoty.
-
-function lbKey(type, diff){ return `stb_top10_${type}_${diff}`; } // ponecháno kvůli zpětné kompatibilitě (nick v localStorage)
-function nickKey(){ return 'stb_lastNick'; }
-
-const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyAwHvjOiSNe4FryVACMIXxLy1n8fK58g_w",
-  authDomain: "doudlevec-ff385.firebaseapp.com",
-  projectId: "doudlevec-ff385",
-  storageBucket: "doudlevec-ff385.firebasestorage.app",
-  messagingSenderId: "147095617243",
-  appId: "1:147095617243:web:f6ac59476a913c86cf16fe",
-  measurementId: "G-NK3SQ0R36G"
-};
-
-let _stbDb = null;
-let _stbFbReady = false;
-
-function initFirestore(){
-  if (_stbFbReady) return _stbDb;
+function loadLB(type, diff){
   try{
-    if (!window.firebase || !firebase.initializeApp || !firebase.firestore){
-      console.warn('[STB] Firebase SDK není načten – leaderboard poběží jen lokálně.');
-      _stbFbReady = true;
-      _stbDb = null;
-      return null;
-    }
-    firebase.initializeApp(FIREBASE_CONFIG);
-    _stbDb = firebase.firestore();
-  }catch(e){
-    // "already exists" je ok (např. při reloadu v některých prostředích)
-    try{ _stbDb = firebase.firestore(); }catch(_e){ _stbDb = null; }
-  }
-  _stbFbReady = true;
-  return _stbDb;
+    const raw = localStorage.getItem(lbKey(type,diff));
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  }catch(e){ return []; }
 }
 
-function sanitizeNick(raw){
-  let s = (raw ?? '').toString().trim();
-  if (!s) s = 'PLAYER';
-  // max 8 znaků
-  s = s.slice(0,8);
-  // zakázat řídící znaky
-  s = s.replace(/[ -]/g,'');
-  if (!s) s = 'PLAYER';
-  return s;
+function saveLB(type, diff, arr){
+  try{ localStorage.setItem(lbKey(type,diff), JSON.stringify(arr)); }catch(e){}
 }
 
-function fmtVal(type, v){
-  const n = Number(v) || 0;
-  return type === 'speed' ? n.toFixed(1) : n.toFixed(2);
+function updateLB(type, diff, value, meta){
+  // meta: {distanceKm, avgKmh, when}
+  const arr = loadLB(type, diff);
+  const entry = {
+    id: `${Date.now()}_${Math.random().toString(16).slice(2)}`,
+    v: Number(value) || 0,
+    when: Date.now(),
+    meta: meta || {}
+  };
+  arr.push(entry);
+  // Sort desc by v
+  arr.sort((a,b) => (b.v||0) - (a.v||0));
+  const trimmed = arr.slice(0,10);
+  saveLB(type, diff, trimmed);
+
+  // Did it make top10?
+  const idx = trimmed.findIndex(e => e.id === entry.id);
+  return { list: trimmed, insertedId: idx >= 0 ? entry.id : null };
 }
-
-async function fsGetTop10(type, diff){
-  const db = initFirestore();
-  if (!db) return null;
-
-  const q = db.collection('stb_leaderboard')
-    .where('type','==', type)
-    .where('diff','==', diff)
-    .orderBy('v','desc')
-    .limit(10);
-
-  const snap = await q.get();
-  const rows = [];
-  snap.forEach(doc => {
-    const d = doc.data() || {};
-    const when = d.when && typeof d.when.toMillis === 'function' ? d.when.toMillis() : Date.now();
-    rows.push({
-      id: doc.id,
-      v: Number(d.v) || 0,
-      when,
-      nick: (d.nick ?? '').toString().slice(0,8)
-    });
-  });
-  return rows;
-}
-
-async function fsSubmitScoreIfTop10(type, diff, value){
-  const db = initFirestore();
-  if (!db) return { rows:null, insertedId:null };
-
-  const v = Number(value) || 0;
-  const current = (await fsGetTop10(type, diff)) || [];
-  const min = current.length < 10 ? -Infinity : (Number(current[current.length-1].v) || 0);
-
-  if (!(v > min)) return { rows: current, insertedId: null };
-
-  // poptání nicku
-  let def = '';
-  try{ def = localStorage.getItem(nickKey()) || ''; }catch(e){}
-  let nick = sanitizeNick(prompt('Jsi v TOP10! Zadej nick (max 8 znaků):', def || ''));
-  try{ localStorage.setItem(nickKey(), nick); }catch(e){}
-
-  const docRef = await db.collection('stb_leaderboard').add({
-    type,
-    diff,
-    v,
-    nick,
-    when: firebase.firestore.FieldValue.serverTimestamp()
-  });
-
-  const after = (await fsGetTop10(type, diff)) || [];
-  return { rows: after, insertedId: docRef.id };
-}
-
-// Cache do vykreslování (render je synchronní, data se dotahují async)
-function ensureLBState(){
-  if (!state.onlineLB){
-    state.onlineLB = {
-      speed: {}, dist: {}
-    };
-  }
-}
-
-function getCachedLB(type, diff){
-  ensureLBState();
-  if (!state.onlineLB[type][diff]){
-    state.onlineLB[type][diff] = { rows: [], highlightId: null, loading: false, ready: false };
-  }
-  return state.onlineLB[type][diff];
-}
-
-function requestLBRefresh(type, diff){
-  const c = getCachedLB(type, diff);
-  if (c.loading) return;
-  c.loading = true;
-  (async () => {
-    try{
-      const rows = await fsGetTop10(type, diff);
-      if (rows) { c.rows = rows; c.ready = true; }
-    }catch(e){
-      console.warn('[STB] Leaderboard fetch failed', e);
-    }finally{
-      c.loading = false;
-    }
-  })();
-}
-
-function requestLBSubmitOnce(diff, avgKmh, distKm){
-  // Save only once per finished run
-  if (state.lbSavedOnline) return;
-  state.lbSavedOnline = true;
-
-  (async () => {
-    try{
-      const sp = await fsSubmitScoreIfTop10('speed', diff, avgKmh);
-      const di = await fsSubmitScoreIfTop10('dist',  diff, distKm);
-
-      const cSp = getCachedLB('speed', diff);
-      const cDi = getCachedLB('dist',  diff);
-
-      if (sp.rows){ cSp.rows = sp.rows; cSp.ready = true; }
-      if (di.rows){ cDi.rows = di.rows; cDi.ready = true; }
-
-      cSp.highlightId = sp.insertedId;
-      cDi.highlightId = di.insertedId;
-    }catch(e){
-      console.warn('[STB] Leaderboard submit failed', e);
-    }
-  })();
-}
-
 
 function fmtDateShort(ms){
   const d = new Date(ms);
@@ -1816,17 +1678,9 @@ function drawLBTable(title, rows, highlightId, x, y, w){
   // header line
   ctx.font = '12px Arial';
   ctx.fillStyle = 'rgba(255,255,255,0.75)';
-  const colRank = x + pad;
-  const colVal  = x + pad + 26;
-  const colDate = x + Math.floor(w * 0.62);
-  const colNick = x + w - pad;
-
-  ctx.fillText('#', colRank, y + pad + 26);
-  ctx.fillText('Hodnota', colVal, y + pad + 26);
-  ctx.fillText('Datum', colDate, y + pad + 26);
-  ctx.textAlign = 'right';
-  ctx.fillText('Nick', colNick, y + pad + 26);
-  ctx.textAlign = 'left';
+  ctx.fillText('#', x + pad, y + pad + 26);
+  ctx.fillText('Hodnota', x + pad + 26, y + pad + 26);
+  ctx.fillText('Datum', x + w - pad - 58, y + pad + 26);
 
   // rows
   for (let i=0;i<10;i++){
@@ -1849,38 +1703,31 @@ function drawLBTable(title, rows, highlightId, x, y, w){
     const rank = `${i+1}.`;
     const val  = (typeof r.v === 'number') ? r.v.toFixed(typeof r.v === 'number' && title.includes('km/h') ? 1 : 2) : String(r.v);
 
-    ctx.fillText(rank, colRank, yy);
-    ctx.fillText(val,  colVal,  yy);
-
+    ctx.fillText(rank, x + pad, yy);
+    ctx.fillText(val, x + pad + 26, yy);
     ctx.fillStyle = isHL ? CLR.red : 'rgba(255,255,255,0.8)';
-    ctx.fillText(fmtDateShort(r.when), colDate, yy);
-
-    ctx.textAlign = 'right';
-    ctx.fillStyle = isHL ? CLR.red : 'rgba(255,255,255,0.9)';
-    ctx.fillText((r && r.nick) ? String(r.nick).slice(0,8) : '', colNick, yy);
-    ctx.textAlign = 'left';
+    ctx.fillText(fmtDateShort(r.when), x + w - pad - 58, yy);
   }
   ctx.restore();
 }
 
 function renderFinalLeaderboards(diff, avgKmh, distKm){
-  // Online submit + refresh (asynchronně), vykreslení používá cache
-  requestLBSubmitOnce(diff, avgKmh, distKm);
-
-  // když ještě nic nemáme, zkus stáhnout (např. při prvním otevření)
-  requestLBRefresh('speed', diff);
-  requestLBRefresh('dist',  diff);
-
-  const speedCache = getCachedLB('speed', diff);
-  const distCache  = getCachedLB('dist',  diff);
-
-  const speedRows = speedCache.rows || [];
-  const distRows  = distCache.rows  || [];
+  // Save only once per finished run
+  if (!state.lbSaved){
+    const meta = { avgKmh: avgKmh, distanceKm: distKm };
+    const sp = updateLB('speed', diff, avgKmh, meta);
+    const di = updateLB('dist', diff, distKm, meta);
+    state.lbSaved = true;
+    state.lbSpeedId = sp.insertedId;
+    state.lbDistId  = di.insertedId;
+  }
+  const speedRows = loadLB('speed', diff);
+  const distRows  = loadLB('dist', diff);
 
   // Draw two tables: one far left, one far right (less overlap with center text)
   const margin = 22;
   const gap = 18;
-  const tableW = Math.min(260, Math.floor((W - margin*2 - gap)/2)); // trochu širší, ale stále se vejde
+  const tableW = Math.min(220, Math.floor((W - margin*2 - gap)/2));
 
   const xLeft  = margin;
   const xRight = W - margin - tableW;
@@ -1888,10 +1735,9 @@ function renderFinalLeaderboards(diff, avgKmh, distKm){
   // Tables lower so center text stays clearly above (≈ 30% height higher)
   const startY = Math.max(Math.floor(H * 0.17), 100);
 
-  drawLBTable(`TOP10 průměrná rychlost (km/h)`, speedRows, speedCache.highlightId, xLeft,  startY, tableW);
-  drawLBTable(`TOP10 vzdálenost (km)`,          distRows,  distCache.highlightId,  xRight, startY, tableW);
+  drawLBTable(`TOP10 průměrná rychlost (km/h)`, speedRows, state.lbSpeedId, xLeft,  startY, tableW);
+  drawLBTable(`TOP10 vzdálenost (km)`,          distRows,  state.lbDistId,  xRight, startY, tableW);
 }
-
 
 function handleWin() {
   const finalTime = getElapsedTime();

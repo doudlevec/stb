@@ -840,6 +840,20 @@ const IMG_TOOSLOW = "data:image/webp;base64,UklGRoCKAQBXRUJQVlA4IHSKAQDwggWdASoA
 // ===== GAME =====
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
+if (!CanvasRenderingContext2D.prototype.roundRect){
+  CanvasRenderingContext2D.prototype.roundRect = function(x,y,w,h,r){
+    r = Math.min(r, w/2, h/2);
+    this.beginPath();
+    this.moveTo(x+r, y);
+    this.arcTo(x+w, y, x+w, y+h, r);
+    this.arcTo(x+w, y+h, x, y+h, r);
+    this.arcTo(x, y+h, x, y, r);
+    this.arcTo(x, y, x+w, y, r);
+    this.closePath();
+    return this;
+  };
+}
+
 
 const W = 1024, H = 576;
 
@@ -942,6 +956,7 @@ function bindHoldButtonWithDoubleTap(btnId, key){
   if(!btn) return;
   const down = (e)=>{
     safePrevent(e);
+    _devTap(key);
     const now = performance.now();
     if (_lastDownByBtn[btnId] && (now - _lastDownByBtn[btnId]) < DOUBLE_TAP_MS){
       _startSprintFrom(btnId);
@@ -954,6 +969,60 @@ if ((now - seq.t0) > TRIPLE_TAP_MS){
   seq.t0 = now;
   seq.count = 0;
 }
+
+// ---------- Developer mode (hidden) ----------
+// Unlock: within first 20s after newGame(): tap LEFT 5x then RIGHT 5x.
+function _devTap(dirKey){
+  try{
+    if (!state) return;
+    if (state.devMode) return;
+    if (!state.devArmStart) return;
+    const age = (performance.now() - state.devArmStart) / 1000;
+    if (age > 20) return;
+
+    if (state.devStage === 0){
+      if (dirKey === 'ArrowLeft'){
+        state.devLeftCount = (state.devLeftCount || 0) + 1;
+        if (state.devLeftCount >= 5){
+          state.devStage = 1;
+          state.devRightCount = 0;
+        }
+      } else {
+        // any other direction breaks the sequence
+        state.devLeftCount = 0;
+      }
+      return;
+    }
+
+    if (state.devStage === 1){
+      if (dirKey === 'ArrowRight'){
+        state.devRightCount = (state.devRightCount || 0) + 1;
+        if (state.devRightCount >= 5){
+          // activate
+          state.devMode = true;
+
+          // 10x cyclist (handled in Biker.update via multiplier)
+          // 5x falling beers (speed + acceleration)
+          state.beersFallSpeed *= 5;
+          state.acceleration *= 5;
+
+          // also speed up current beers already on screen
+          try{
+            if (Array.isArray(beers)){
+              beers.forEach(b=>{ if (b && typeof b.speedY === 'number') b.speedY *= 5; });
+            }
+          }catch(_){}
+        }
+      } else {
+        // wrong key breaks stage 2
+        state.devStage = 0;
+        state.devLeftCount = 0;
+        state.devRightCount = 0;
+      }
+    }
+  }catch(_){}
+}
+
 seq.count += 1;
 _tapSeqByBtn[btnId] = seq;
 if (seq.count >= 3){
@@ -1278,7 +1347,7 @@ class Biker {
 
   update(dt) {
     this.speedX = 0;
-    let currentSpeed = this.baseSpeed;
+    let currentSpeed = this.baseSpeed * (state && state.devMode ? 10 : 1);
 
     const left = keys['ArrowLeft'] || keys['a'];
     const right = keys['ArrowRight'] || keys['d'];
@@ -1334,7 +1403,7 @@ class Biker {
       // Hobby = baseScale
       // Masters = +30% vs Hobby
       // Profi = +30% vs Masters (i.e., +69% vs Hobby)
-      let scale = 0.4212;
+      let scale = 0.4212 * 1.3;
       if (difficulty === 'masters') scale *= 1.3;
       else if (difficulty === 'profi') scale *= 1.69;
       this.distance += base * scale;
@@ -1447,6 +1516,17 @@ const DIFFICULTY = {
   masters: { fallSpeed: (0.375 * 0.8) * 0.125 * 1.20 * 1.10 * 1.25 * 1.20 * 1.20,  acceleration: 0.00015 * 0.7,  label: '🏅 Masters' },
   profi:   { fallSpeed: 0.375 * 0.1375 * 1.30 * 1.10 * 1.50 * 1.30 * 1.30,         acceleration: 0.00015,         label: '🏆 Profi'   },
 };
+    
+// Global tuning: +50% base fall speed (from start and across rounds), -50% fall-speed progression (acceleration)
+const FALLSPEED_BASE_MULT = 2.70;
+const FALLSPEED_ACCEL_MULT = 0.60;
+try{
+  Object.keys(DIFFICULTY).forEach(k=>{
+    if (DIFFICULTY[k] && typeof DIFFICULTY[k].fallSpeed === 'number') DIFFICULTY[k].fallSpeed *= FALLSPEED_BASE_MULT;
+    if (DIFFICULTY[k] && typeof DIFFICULTY[k].acceleration === 'number') DIFFICULTY[k].acceleration *= FALLSPEED_ACCEL_MULT;
+  });
+}catch(_){ }
+
 let difficulty = null;
 
 // Game state
@@ -1470,18 +1550,23 @@ function newGame() {
     beersCaught: 0,
     missedBeers: 0,
     boostCount: 30,
-    totalCost: (state && typeof state.totalCost === 'number') ? state.totalCost : 0,
+    totalCost: 0,
     penaltyTime: 0,
     lastMilestone: 0,
     startTime: performance.now(),
+    devMode: false,
+    devArmStart: performance.now(),
+    devStage: 0,
+    devLeftCount: 0,
+    devRightCount: 0,
     lastDistance: 0,
     // Avg speed tracking
-    totalRideSeconds: (state && typeof state.totalRideSeconds === 'number') ? state.totalRideSeconds : 0,
+    totalRideSeconds: 0,
     lastDistanceAtRoundStart: 0,
     lastRoundTime: 0,
     lastRoundDistance: 0,
-    endTimeSec: (state && typeof state.endTimeSec === 'number') ? state.endTimeSec : 0,
-    endDistance: (state && typeof state.endDistance === 'number') ? state.endDistance : 0,
+    endTimeSec: 0,
+    endDistance: 0,
   };
   totalPauseTime = 0;
   paused = false;
@@ -1523,6 +1608,135 @@ function calcAvgSpeedKmh(distanceKm, timeSec){
   // 1 reálná sekunda = 1 herní minuta -> herní hodiny = timeSec / 60
   if (!timeSec || timeSec <= 0) return 0;
   return (distanceKm * 60) / timeSec;
+}
+
+// ---------- TOP10 (localStorage) ----------
+function lbKey(type, diff){ return `stb_top10_${type}_${diff}`; }
+
+function loadLB(type, diff){
+  try{
+    const raw = localStorage.getItem(lbKey(type,diff));
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  }catch(e){ return []; }
+}
+
+function saveLB(type, diff, arr){
+  try{ localStorage.setItem(lbKey(type,diff), JSON.stringify(arr)); }catch(e){}
+}
+
+function updateLB(type, diff, value, meta){
+  // meta: {distanceKm, avgKmh, when}
+  const arr = loadLB(type, diff);
+  const entry = {
+    id: `${Date.now()}_${Math.random().toString(16).slice(2)}`,
+    v: Number(value) || 0,
+    when: Date.now(),
+    meta: meta || {}
+  };
+  arr.push(entry);
+  // Sort desc by v
+  arr.sort((a,b) => (b.v||0) - (a.v||0));
+  const trimmed = arr.slice(0,10);
+  saveLB(type, diff, trimmed);
+
+  // Did it make top10?
+  const idx = trimmed.findIndex(e => e.id === entry.id);
+  return { list: trimmed, insertedId: idx >= 0 ? entry.id : null };
+}
+
+function fmtDateShort(ms){
+  const d = new Date(ms);
+  const dd = String(d.getDate()).padStart(2,'0');
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const yy = String(d.getFullYear()).slice(-2);
+  return `${dd}.${mm}.${yy}`;
+}
+
+function drawLBTable(title, rows, highlightId, x, y, w){
+  const rowH = 22;
+  const pad = 10;
+  const h = pad*2 + 26 + rowH*10;
+
+  // background card
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 14);
+  ctx.fill();
+  ctx.stroke();
+
+  // title
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.font = 'bold 18px Arial';
+  ctx.fillStyle = CLR.white;
+  ctx.fillText(title, x + pad, y + pad);
+
+  // header line
+  ctx.font = '12px Arial';
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  ctx.fillText('#', x + pad, y + pad + 26);
+  ctx.fillText('Hodnota', x + pad + 26, y + pad + 26);
+  ctx.fillText('Datum', x + w - pad - 58, y + pad + 26);
+
+  // rows
+  for (let i=0;i<10;i++){
+    const r = rows[i];
+    const yy = y + pad + 44 + i*rowH;
+
+    // subtle separator
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.beginPath();
+    ctx.moveTo(x + pad, yy + rowH - 2);
+    ctx.lineTo(x + w - pad, yy + rowH - 2);
+    ctx.stroke();
+
+    if (!r) continue;
+
+    const isHL = (highlightId && r.id === highlightId);
+    ctx.font = isHL ? 'bold 14px Arial' : '14px Arial';
+    ctx.fillStyle = isHL ? CLR.red : CLR.white;
+
+    const rank = `${i+1}.`;
+    const val  = (typeof r.v === 'number') ? r.v.toFixed(typeof r.v === 'number' && title.includes('km/h') ? 1 : 2) : String(r.v);
+
+    ctx.fillText(rank, x + pad, yy);
+    ctx.fillText(val, x + pad + 26, yy);
+    ctx.fillStyle = isHL ? CLR.red : 'rgba(255,255,255,0.8)';
+    ctx.fillText(fmtDateShort(r.when), x + w - pad - 58, yy);
+  }
+  ctx.restore();
+}
+
+function renderFinalLeaderboards(diff, avgKmh, distKm){
+  // Save only once per finished run
+  if (!state.lbSaved){
+    const meta = { avgKmh: avgKmh, distanceKm: distKm };
+    const sp = updateLB('speed', diff, avgKmh, meta);
+    const di = updateLB('dist', diff, distKm, meta);
+    state.lbSaved = true;
+    state.lbSpeedId = sp.insertedId;
+    state.lbDistId  = di.insertedId;
+  }
+  const speedRows = loadLB('speed', diff);
+  const distRows  = loadLB('dist', diff);
+
+  // Draw two tables: one far left, one far right (less overlap with center text)
+  const margin = 22;
+  const gap = 18;
+  const tableW = Math.min(220, Math.floor((W - margin*2 - gap)/2));
+
+  const xLeft  = margin;
+  const xRight = W - margin - tableW;
+
+  // Tables lower so center text stays clearly above (≈ 30% height higher)
+  const startY = Math.max(Math.floor(H * 0.17), 100);
+
+  drawLBTable(`TOP10 průměrná rychlost (km/h)`, speedRows, state.lbSpeedId, xLeft,  startY, tableW);
+  drawLBTable(`TOP10 vzdálenost (km)`,          distRows,  state.lbDistId,  xRight, startY, tableW);
 }
 
 function handleWin() {
@@ -1630,16 +1844,16 @@ function loop(now) {
       }   // big trophy
 
       ctx.save();
-      ctx.textAlign = "right";
+      ctx.textAlign = "left";
       ctx.textBaseline = "top";
       ctx.font = `bold ${size}px Arial`;
       ctx.fillStyle = CLR.white;
-      ctx.fillText(trophy, W - 20, 16);
+      ctx.fillText(trophy, 20, 16);
 
       if (dLabel){
         ctx.font = `bold 18px Arial`;
         ctx.fillStyle = CLR.orange;
-        ctx.fillText(dLabel, W - 20, 16 + size + 2);
+        ctx.fillText(dLabel, 20, 16 + size + 2);
       }
       ctx.restore();
     })();
@@ -1651,6 +1865,7 @@ drawTextShadow('Ale už jsi úplně prošitej. Pokračuj zítra!', 28, W/2, H/2 
     }
     const spTotal = calcAvgSpeedKmh(state.endDistance || biker.distance, state.endTimeSec);
     drawTextShadow(`Průměrná rychlost: ${spTotal.toFixed(1)} km/h`, 26, W/2, H/2 + 60, CLR.white);
+    renderFinalLeaderboards(difficulty, spTotal, (state.endDistance || biker.distance));
     drawTextShadow(`Účet pivovaru: ${state.totalCost} Kč`, 28, W/2, H/2 + 80, CLR.white);
     drawTextShadow('Stiskni R pro návrat do menu', 24, W/2, H/2 + 130, CLR.orange);
     return;
@@ -1681,7 +1896,7 @@ drawTextShadow('Ale už jsi úplně prošitej. Pokračuj zítra!', 28, W/2, H/2 
     drawTextShadow('Super, chvilku si vydechni a jedeme dál!', 36, W/2, H/2 - 20, CLR.green);
     drawTextShadow(`Už jsi našlapal: ${biker.distance.toFixed(2)} km`, 30, W/2, H/2 + 20, CLR.dblue);
     const sp = calcAvgSpeedKmh(state.lastRoundDistance || 0, state.lastRoundTime || 0);
-    drawTextShadow(`Průměrná rychlost (tuto kolo): ${sp.toFixed(1)} km/h`, 24, W/2, H/2 + 60, CLR.white);
+    drawTextShadow(`Průměrná rychlost (toto kolo): ${sp.toFixed(1)} km/h`, 24, W/2, H/2 + 60, CLR.white);
     drawTextShadow(`${10 - Math.floor(elapsed)}s`, 52, W/2, H/2 + 80, CLR.red);
     if (elapsed >= 10) {
       screenPhase = 'playing';

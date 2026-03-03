@@ -1679,7 +1679,8 @@ async function fsGetTop10(type, diff){
   const q = db.collection('stb_leaderboard')
     .where('type','==', type)
     .where('diff','==', diff)
-    .orderBy('v','desc')
+    // speed: vyšší je lepší; dist: nižší je lepší
+    .orderBy('v', (type === 'dist') ? 'asc' : 'desc')
     .limit(10);
 
   const snap = await q.get();
@@ -1703,9 +1704,16 @@ async function fsSubmitScoreIfTop10(type, diff, value){
 
   const v = Number(value) || 0;
   const current = (await fsGetTop10(type, diff)) || [];
-  const min = current.length < 10 ? -Infinity : (Number(current[current.length-1].v) || 0);
+  // speed: vyšší je lepší; dist: nižší je lepší
+  const threshold = current.length < 10
+    ? (type === 'dist' ? Infinity : -Infinity)
+    : (Number(current[current.length-1].v) || 0); // poslední je "nejhorší" (desc => nejnižší, asc => nejvyšší)
 
-  if (!(v > min)) return { rows: current, insertedId: null };
+  if (type === 'dist'){
+    if (!(v < threshold)) return { rows: current, insertedId: null };
+  }else{
+    if (!(v > threshold)) return { rows: current, insertedId: null };
+  }
 
   // poptání nicku
   let def = '';
@@ -1889,7 +1897,7 @@ function renderFinalLeaderboards(diff, avgKmh, distKm){
   const startY = Math.max(Math.floor(H * 0.17), 100);
 
   drawLBTable(`TOP10 průměrná rychlost (km/h)`, speedRows, speedCache.highlightId, xLeft,  startY, tableW);
-  drawLBTable(`TOP10 vzdálenost (km)`,          distRows,  distCache.highlightId,  xRight, startY, tableW);
+  drawLBTable(`TOP10 nejméně najetých km`,          distRows,  distCache.highlightId,  xRight, startY, tableW);
 }
 
 

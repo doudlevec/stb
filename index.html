@@ -264,125 +264,12 @@ canvas{
 
 </style>
 
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
-  import {
-    getFirestore, collection, addDoc, query, where, orderBy, limit, getDocs, serverTimestamp
-  } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore.js";
-
-  const firebaseConfig = {
-    apiKey: "AIzaSyAwHvjOiSNe4FryVACMIXxLy1n8fK58g_w",
-    authDomain: "doudlevec-ff385.firebaseapp.com",
-    projectId: "doudlevec-ff385",
-    storageBucket: "doudlevec-ff385.firebasestorage.app",
-    messagingSenderId: "147095617243",
-    appId: "1:147095617243:web:f6ac59476a913c86cf16fe",
-    measurementId: "G-NK3SQ0R36G"
-  };
-
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
-
-  window.STB_DB = db;
-  window.STB_FS = { collection, addDoc, query, where, orderBy, limit, getDocs, serverTimestamp };
-</script>
+<!-- Firebase (compat) – pro Firestore online TOP10 -->
+<script src="https://www.gstatic.com/firebasejs/12.10.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.10.0/firebase-firestore-compat.js"></script>
 
 </head>
 <body>
-<style>
-  #nickModalBackdrop{
-    position:fixed; inset:0; background:rgba(0,0,0,.65);
-    display:none; align-items:center; justify-content:center;
-    z-index:100000;
-  }
-  #nickModal{
-    width:min(420px, 92vw);
-    background:#121622;
-    color:#e9ecff;
-    border:1px solid rgba(255,255,255,.12);
-    border-radius:16px;
-    box-shadow:0 14px 40px rgba(0,0,0,.45);
-    padding:16px 16px 14px;
-    font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;
-  }
-  #nickModal h3{ margin:0 0 8px; font-size:18px; }
-  #nickModal p{ margin:0 0 12px; color:#b9c0ff; font-size:14px; line-height:1.35; }
-  #nickModal input{
-    width:100%;
-    padding:10px 12px;
-    border-radius:12px;
-    border:1px solid rgba(255,255,255,.14);
-    background:rgba(255,255,255,.06);
-    color:#fff;
-    font-size:16px;
-    outline:none;
-  }
-  #nickModal .row{
-    display:flex; gap:10px; margin-top:12px;
-  }
-  #nickModal button{
-    flex:1;
-    padding:10px 12px;
-    border-radius:12px;
-    border:0;
-    font-weight:700;
-    cursor:pointer;
-  }
-  #nickOk{ background:#ffd166; color:#111; }
-  #nickSkip{ background:rgba(255,255,255,.10); color:#e9ecff; }
-</style>
-<div id="nickModalBackdrop" role="dialog" aria-modal="true" aria-label="Zadej nick do TOP10">
-  <div id="nickModal">
-    <h3 id="nickModalTitle">TOP10</h3>
-    <p id="nickModalText">Zadej nick (max 8 znaků):</p>
-    <input id="nickModalInput" type="text" maxlength="8" autocomplete="off" spellcheck="false" />
-    <div class="row">
-      <button id="nickOk" type="button">Uložit</button>
-      <button id="nickSkip" type="button">Přeskočit</button>
-    </div>
-  </div>
-</div>
-
-<script>
-(function(){
-  function showRequested(){
-    try{
-      var el = document.getElementById('devBadge');
-      if(!el){
-        el = document.createElement('div');
-        el.id = 'devBadge';
-        el.style.position='fixed';
-        el.style.right='12px';
-        el.style.bottom='12px';
-        el.style.zIndex='99999';
-        el.style.padding='8px 10px';
-        el.style.borderRadius='12px';
-        el.style.font='bold 14px/1.2 system-ui,-apple-system,Segoe UI,Roboto,Arial';
-        el.style.background='rgba(0,0,0,0.75)';
-        el.style.color='#ffd166';
-        el.style.boxShadow='0 8px 20px rgba(0,0,0,.35)';
-        el.style.pointerEvents='none';
-        el.textContent='DEV MODE… ⏳';
-        document.body.appendChild(el);
-      } else {
-        el.textContent='DEV MODE… ⏳';
-      }
-    }catch(_){}
-  }
-  function onKey(e){
-    var code = e.code || '';
-    var key = (e.key || '').toLowerCase();
-    if((code === 'KeyH' || key === 'h') && e.ctrlKey && e.shiftKey){
-      window.__STB_DEV_REQUESTED__ = true;
-      showRequested();
-      try{ e.preventDefault(); }catch(_){}
-    }
-  }
-  window.addEventListener('keydown', onKey, {capture:true, passive:false});
-  document.addEventListener('keydown', onKey, {capture:true, passive:false});
-})();
-</script>
-
 <div id="gameRoot">
 <canvas id="gameCanvas" width="1024" height="576"></canvas>
 </div>
@@ -1728,128 +1615,188 @@ function calcAvgSpeedKmh(distanceKm, timeSec){
   return (distanceKm * 60) / timeSec;
 }
 
+// ---------- TOP10 (localStorage) ----------
 
+// ---- Online Leaderboards (Firebase Firestore) ----
+// Tabulky TOP10 se ukládají online do Firestore. Zůstává stejná šířka tabulek, jen přibyl sloupec Nick (max 8).
+// Bez přihlášení (varianta A) – doporučujeme omezit zápis Firestore pravidly na validní hodnoty.
 
-// UI modal instead of window.prompt (some browsers block prompt from animation loops)
-function askNickModal(message){
-  return new Promise((resolve)=>{
-    try{
-      const back = document.getElementById('nickModalBackdrop');
-      const title = document.getElementById('nickModalTitle');
-      const text  = document.getElementById('nickModalText');
-      const inp   = document.getElementById('nickModalInput');
-      const ok    = document.getElementById('nickOk');
-      const skip  = document.getElementById('nickSkip');
+function lbKey(type, diff){ return `stb_top10_${type}_${diff}`; } // ponecháno kvůli zpětné kompatibilitě (nick v localStorage)
+function nickKey(){ return 'stb_lastNick'; }
 
-      if (!back || !inp || !ok || !skip){
-        // fallback (should still work on desktop in most cases)
-        resolve(_normNick(prompt(message || "TOP10! Zadej nick (max 8 znaků):") || ""));
-        return;
-      }
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAwHvjOiSNe4FryVACMIXxLy1n8fK58g_w",
+  authDomain: "doudlevec-ff385.firebaseapp.com",
+  projectId: "doudlevec-ff385",
+  storageBucket: "doudlevec-ff385.firebasestorage.app",
+  messagingSenderId: "147095617243",
+  appId: "1:147095617243:web:f6ac59476a913c86cf16fe",
+  measurementId: "G-NK3SQ0R36G"
+};
 
-      title.textContent = "TOP10";
-      text.textContent = message || "Zadej nick (max 8 znaků):";
-      inp.value = "";
-      back.style.display = "flex";
+let _stbDb = null;
+let _stbFbReady = false;
 
-      const cleanup = ()=>{
-        back.style.display = "none";
-        ok.onclick = null;
-        skip.onclick = null;
-        inp.onkeydown = null;
-      };
-
-      ok.onclick = ()=>{
-        const nick = _normNick(inp.value || "");
-        cleanup();
-        resolve(nick);
-      };
-      skip.onclick = ()=>{
-        cleanup();
-        resolve("");
-      };
-      inp.onkeydown = (e)=>{
-        if (e.key === "Enter"){
-          e.preventDefault();
-          ok.click();
-        }
-        if (e.key === "Escape"){
-          e.preventDefault();
-          skip.click();
-        }
-      };
-
-      // focus a tick later (ensures visible)
-      setTimeout(()=>{ try{ inp.focus(); }catch(_){ } }, 50);
-    }catch(_){
-      resolve(_normNick(prompt(message || "TOP10! Zadej nick (max 8 znaků):") || ""));
+function initFirestore(){
+  if (_stbFbReady) return _stbDb;
+  try{
+    if (!window.firebase || !firebase.initializeApp || !firebase.firestore){
+      console.warn('[STB] Firebase SDK není načten – leaderboard poběží jen lokálně.');
+      _stbFbReady = true;
+      _stbDb = null;
+      return null;
     }
-  });
+    firebase.initializeApp(FIREBASE_CONFIG);
+    _stbDb = firebase.firestore();
+  }catch(e){
+    // "already exists" je ok (např. při reloadu v některých prostředích)
+    try{ _stbDb = firebase.firestore(); }catch(_e){ _stbDb = null; }
+  }
+  _stbFbReady = true;
+  return _stbDb;
 }
 
-// ---------- TOP10 (Firebase / Firestore) ----------
-function _hasFS(){
-  return !!(window.STB_DB && window.STB_FS && window.STB_FS.query);
-}
-function _lbCol(){
-  return window.STB_FS.collection(window.STB_DB, "leaderboards");
-}
-function _normNick(s){
-  s = (s || "").toString().trim();
-  s = s.replace(/\s+/g, " ");
-  if (s.length > 8) s = s.slice(0,8);
-  if (s.length === 0) s = "Anon";
+function sanitizeNick(raw){
+  let s = (raw ?? '').toString().trim();
+  if (!s) s = 'PLAYER';
+  // max 8 znaků
+  s = s.slice(0,8);
+  // zakázat řídící znaky
+  s = s.replace(/[ -]/g,'');
+  if (!s) s = 'PLAYER';
   return s;
 }
-function _fmtVal(title, v){
-  if (typeof v !== 'number') v = Number(v)||0;
-  const isSpeed = title.includes("km/h");
-  return isSpeed ? v.toFixed(1) : v.toFixed(2);
+
+function fmtVal(type, v){
+  const n = Number(v) || 0;
+  return type === 'speed' ? n.toFixed(1) : n.toFixed(2);
 }
 
-async function loadTop10(type, diff){
-  if (!_hasFS()) return [];
-  const fs = window.STB_FS;
-  const q = fs.query(
-    _lbCol(),
-    fs.where("type","==",type),
-    fs.where("difficulty","==",diff),
-    fs.orderBy("value","desc"),
-    fs.limit(10)
-  );
-  const snap = await fs.getDocs(q);
-  const out = [];
-  snap.forEach(doc=>{
+async function fsGetTop10(type, diff){
+  const db = initFirestore();
+  if (!db) return null;
+
+  const q = db.collection('stb_leaderboard')
+    .where('type','==', type)
+    .where('diff','==', diff)
+    .orderBy('v','desc')
+    .limit(10);
+
+  const snap = await q.get();
+  const rows = [];
+  snap.forEach(doc => {
     const d = doc.data() || {};
-    out.push({
+    const when = d.when && typeof d.when.toMillis === 'function' ? d.when.toMillis() : Date.now();
+    rows.push({
       id: doc.id,
-      v: Number(d.value)||0,
-      nick: (d.nick||"").toString(),
-      when: Date.now()
+      v: Number(d.v) || 0,
+      when,
+      nick: (d.nick ?? '').toString().slice(0,8)
     });
   });
-  return out;
+  return rows;
 }
 
-async function submitScore(type, diff, value, nick){
-  if (!_hasFS()) return null;
-  const fs = window.STB_FS;
-  const docRef = await fs.addDoc(_lbCol(), {
+async function fsSubmitScoreIfTop10(type, diff, value){
+  const db = initFirestore();
+  if (!db) return { rows:null, insertedId:null };
+
+  const v = Number(value) || 0;
+  const current = (await fsGetTop10(type, diff)) || [];
+  const min = current.length < 10 ? -Infinity : (Number(current[current.length-1].v) || 0);
+
+  if (!(v > min)) return { rows: current, insertedId: null };
+
+  // poptání nicku
+  let def = '';
+  try{ def = localStorage.getItem(nickKey()) || ''; }catch(e){}
+  let nick = sanitizeNick(prompt('Jsi v TOP10! Zadej nick (max 8 znaků):', def || ''));
+  try{ localStorage.setItem(nickKey(), nick); }catch(e){}
+
+  const docRef = await db.collection('stb_leaderboard').add({
     type,
-    difficulty: diff,
-    nick: _normNick(nick),
-    value: Number(value)||0,
-    createdAt: fs.serverTimestamp()
+    diff,
+    v,
+    nick,
+    when: firebase.firestore.FieldValue.serverTimestamp()
   });
-  return docRef ? docRef.id : null;
+
+  const after = (await fsGetTop10(type, diff)) || [];
+  return { rows: after, insertedId: docRef.id };
 }
 
+// Cache do vykreslování (render je synchronní, data se dotahují async)
+function ensureLBState(){
+  if (!state.onlineLB){
+    state.onlineLB = {
+      speed: {}, dist: {}
+    };
+  }
+}
+
+function getCachedLB(type, diff){
+  ensureLBState();
+  if (!state.onlineLB[type][diff]){
+    state.onlineLB[type][diff] = { rows: [], highlightId: null, loading: false, ready: false };
+  }
+  return state.onlineLB[type][diff];
+}
+
+function requestLBRefresh(type, diff){
+  const c = getCachedLB(type, diff);
+  if (c.loading) return;
+  c.loading = true;
+  (async () => {
+    try{
+      const rows = await fsGetTop10(type, diff);
+      if (rows) { c.rows = rows; c.ready = true; }
+    }catch(e){
+      console.warn('[STB] Leaderboard fetch failed', e);
+    }finally{
+      c.loading = false;
+    }
+  })();
+}
+
+function requestLBSubmitOnce(diff, avgKmh, distKm){
+  // Save only once per finished run
+  if (state.lbSavedOnline) return;
+  state.lbSavedOnline = true;
+
+  (async () => {
+    try{
+      const sp = await fsSubmitScoreIfTop10('speed', diff, avgKmh);
+      const di = await fsSubmitScoreIfTop10('dist',  diff, distKm);
+
+      const cSp = getCachedLB('speed', diff);
+      const cDi = getCachedLB('dist',  diff);
+
+      if (sp.rows){ cSp.rows = sp.rows; cSp.ready = true; }
+      if (di.rows){ cDi.rows = di.rows; cDi.ready = true; }
+
+      cSp.highlightId = sp.insertedId;
+      cDi.highlightId = di.insertedId;
+    }catch(e){
+      console.warn('[STB] Leaderboard submit failed', e);
+    }
+  })();
+}
+
+
+function fmtDateShort(ms){
+  const d = new Date(ms);
+  const dd = String(d.getDate()).padStart(2,'0');
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const yy = String(d.getFullYear()).slice(-2);
+  return `${dd}.${mm}.${yy}`;
+}
 
 function drawLBTable(title, rows, highlightId, x, y, w){
   const rowH = 22;
   const pad = 10;
   const h = pad*2 + 26 + rowH*10;
 
+  // background card
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.35)';
   ctx.strokeStyle = 'rgba(255,255,255,0.12)';
@@ -1859,30 +1806,34 @@ function drawLBTable(title, rows, highlightId, x, y, w){
   ctx.fill();
   ctx.stroke();
 
+  // title
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  ctx.font = 'bold 16px Arial';
+  ctx.font = 'bold 18px Arial';
   ctx.fillStyle = CLR.white;
   ctx.fillText(title, x + pad, y + pad);
 
-  ctx.font = '11px Arial';
+  // header line
+  ctx.font = '12px Arial';
   ctx.fillStyle = 'rgba(255,255,255,0.75)';
-
   const colRank = x + pad;
-  const colVal  = x + pad + 24;
-  const colNick = x + w - pad - 70;
-  const colDate = x + w - pad;
+  const colVal  = x + pad + 26;
+  const colDate = x + Math.floor(w * 0.62);
+  const colNick = x + w - pad;
 
-  ctx.fillText('#', colRank, y + pad + 24);
-  ctx.fillText('Hodnota', colVal, y + pad + 24);
-  ctx.fillText('Nick', colNick, y + pad + 24);
+  ctx.fillText('#', colRank, y + pad + 26);
+  ctx.fillText('Hodnota', colVal, y + pad + 26);
+  ctx.fillText('Datum', colDate, y + pad + 26);
   ctx.textAlign = 'right';
-  ctx.fillText('Datum', colDate, y + pad + 24);
+  ctx.fillText('Nick', colNick, y + pad + 26);
+  ctx.textAlign = 'left';
 
+  // rows
   for (let i=0;i<10;i++){
     const r = rows[i];
-    const yy = y + pad + 42 + i*rowH;
+    const yy = y + pad + 44 + i*rowH;
 
+    // subtle separator
     ctx.strokeStyle = 'rgba(255,255,255,0.08)';
     ctx.beginPath();
     ctx.moveTo(x + pad, yy + rowH - 2);
@@ -1892,99 +1843,53 @@ function drawLBTable(title, rows, highlightId, x, y, w){
     if (!r) continue;
 
     const isHL = (highlightId && r.id === highlightId);
-    ctx.font = isHL ? 'bold 13px Arial' : '13px Arial';
+    ctx.font = isHL ? 'bold 14px Arial' : '14px Arial';
     ctx.fillStyle = isHL ? CLR.red : CLR.white;
-    ctx.textAlign = 'left';
 
-    ctx.fillText(`${i+1}.`, colRank, yy);
-    ctx.fillText(_fmtVal(title, r.v), colVal, yy);
+    const rank = `${i+1}.`;
+    const val  = (typeof r.v === 'number') ? r.v.toFixed(typeof r.v === 'number' && title.includes('km/h') ? 1 : 2) : String(r.v);
 
-    ctx.fillStyle = isHL ? CLR.red : 'rgba(255,255,255,0.9)';
-    ctx.fillText((r.nick||'').slice(0,8), colNick, yy);
+    ctx.fillText(rank, colRank, yy);
+    ctx.fillText(val,  colVal,  yy);
+
+    ctx.fillStyle = isHL ? CLR.red : 'rgba(255,255,255,0.8)';
+    ctx.fillText(fmtDateShort(r.when), colDate, yy);
 
     ctx.textAlign = 'right';
-    ctx.fillStyle = isHL ? CLR.red : 'rgba(255,255,255,0.7)';
-
-    let dateStr = '';
-    try{
-      const d = new Date(r.when || Date.now());
-      dateStr = d.toLocaleDateString('cs-CZ');
-    }catch(_){}
-
-    ctx.fillText(dateStr, colDate, yy);
+    ctx.fillStyle = isHL ? CLR.red : 'rgba(255,255,255,0.9)';
+    ctx.fillText((r && r.nick) ? String(r.nick).slice(0,8) : '', colNick, yy);
+    ctx.textAlign = 'left';
   }
-
   ctx.restore();
 }
 
-
-function _kickLBFetch(diff, avgKmh, distKm){
-  if (!state) return;
-
-  if (!state.lbFetchStarted){
-    state.lbFetchStarted = true;
-    (async ()=>{
-      try{
-        const [speedRows, distRows] = await Promise.all([
-          loadTop10('speed', diff),
-          loadTop10('dist', diff)
-        ]);
-        state.lbSpeedRows = speedRows;
-        state.lbDistRows  = distRows;
-      }catch(_){}
-    })();
-  }
-
-  if (!state.lbSaved && _hasFS()){
-    state.lbSaved = true;
-    (async ()=>{
-      try{
-        const curS = await loadTop10('speed', diff);
-        const curD = await loadTop10('dist', diff);
-
-        const qualifies = (list, v)=>{
-          if (!list || list.length < 10) return true;
-          const last = list[list.length-1];
-          return (Number(v)||0) > (Number(last.v)||0);
-        };
-
-        if (qualifies(curS, avgKmh)){
-          const nick = _normNick(await askNickModal("TOP10! Zadej nick (max 8 znaků):") || "");
-          const id = await submitScore('speed', diff, avgKmh, nick);
-          state.lbSpeedId = id;
-        }
-        if (qualifies(curD, distKm)){
-          const nick = _normNick(await askNickModal("TOP10! Zadej nick (max 8 znaků):") || "");
-          const id = await submitScore('dist', diff, distKm, nick);
-          state.lbDistId = id;
-        }
-
-        const [speedRows, distRows] = await Promise.all([
-          loadTop10('speed', diff),
-          loadTop10('dist', diff)
-        ]);
-        state.lbSpeedRows = speedRows;
-        state.lbDistRows  = distRows;
-      }catch(_){}
-    })();
-  }
-}
-
 function renderFinalLeaderboards(diff, avgKmh, distKm){
-  _kickLBFetch(diff, avgKmh, distKm);
+  // Online submit + refresh (asynchronně), vykreslení používá cache
+  requestLBSubmitOnce(diff, avgKmh, distKm);
 
-  const speedRows = state.lbSpeedRows || [];
-  const distRows  = state.lbDistRows  || [];
+  // když ještě nic nemáme, zkus stáhnout (např. při prvním otevření)
+  requestLBRefresh('speed', diff);
+  requestLBRefresh('dist',  diff);
 
+  const speedCache = getCachedLB('speed', diff);
+  const distCache  = getCachedLB('dist',  diff);
+
+  const speedRows = speedCache.rows || [];
+  const distRows  = distCache.rows  || [];
+
+  // Draw two tables: one far left, one far right (less overlap with center text)
   const margin = 22;
   const gap = 18;
-  const tableW = Math.min(220, Math.floor((W - margin*2 - gap)/2));
+  const tableW = Math.min(260, Math.floor((W - margin*2 - gap)/2)); // trochu širší, ale stále se vejde
+
   const xLeft  = margin;
   const xRight = W - margin - tableW;
+
+  // Tables lower so center text stays clearly above (≈ 30% height higher)
   const startY = Math.max(Math.floor(H * 0.17), 100);
 
-  drawLBTable(`TOP10 průměrná rychlost (km/h)`, speedRows, state.lbSpeedId, xLeft,  startY, tableW);
-  drawLBTable(`TOP10 vzdálenost (km)`,          distRows,  state.lbDistId,  xRight, startY, tableW);
+  drawLBTable(`TOP10 průměrná rychlost (km/h)`, speedRows, speedCache.highlightId, xLeft,  startY, tableW);
+  drawLBTable(`TOP10 vzdálenost (km)`,          distRows,  distCache.highlightId,  xRight, startY, tableW);
 }
 
 
@@ -2012,11 +1917,6 @@ function handleWin() {
   state.penaltyTime = 0;
   state.lastMilestone = 0;
   state.beersFallSpeed = DIFFICULTY[difficulty].fallSpeed;
-  // Keep developer-mode speedup across rounds (after 100 beers)
-  if (state.devMode){
-    state.beersFallSpeed *= 5;
-    state.acceleration *= 5;
-  }
   state.beerCount = 10;
   beers = [];
   for (let i = 0; i < state.beerCount; i++) beers.push(new BeerSprite(state.beersFallSpeed));
@@ -2025,21 +1925,6 @@ function handleWin() {
 let lastTime = performance.now();
 
 function loop(now) {
-  // DEV MODE activation request from global hotkey (press CTRL+SHIFT+H)
-  try{
-    if (window.__STB_DEV_REQUESTED__ && state && !state.devMode){
-      state.devMode = true;
-      state.beersFallSpeed *= 5;
-      state.acceleration *= 5;
-      try{ if (Array.isArray(beers)) beers.forEach(b=>{ if (b && typeof b.speedY === 'number') b.speedY *= 5; }); }catch(_){}
-      try{
-        const el = document.getElementById('devBadge');
-        if (el) el.textContent = 'DEV MODE ✅';
-      }catch(_){}
-      try{ console.log('[Save the Beer] DEV MODE activated (CTRL+SHIFT+H)'); }catch(_){}
-    }
-  }catch(_){}
-
   const dt = Math.min((now - lastTime) / 16.67, 3);
   lastTime = now;
   requestAnimationFrame(loop);

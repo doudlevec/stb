@@ -289,6 +289,60 @@ canvas{
 
 </head>
 <body>
+<style>
+  #nickModalBackdrop{
+    position:fixed; inset:0; background:rgba(0,0,0,.65);
+    display:none; align-items:center; justify-content:center;
+    z-index:100000;
+  }
+  #nickModal{
+    width:min(420px, 92vw);
+    background:#121622;
+    color:#e9ecff;
+    border:1px solid rgba(255,255,255,.12);
+    border-radius:16px;
+    box-shadow:0 14px 40px rgba(0,0,0,.45);
+    padding:16px 16px 14px;
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;
+  }
+  #nickModal h3{ margin:0 0 8px; font-size:18px; }
+  #nickModal p{ margin:0 0 12px; color:#b9c0ff; font-size:14px; line-height:1.35; }
+  #nickModal input{
+    width:100%;
+    padding:10px 12px;
+    border-radius:12px;
+    border:1px solid rgba(255,255,255,.14);
+    background:rgba(255,255,255,.06);
+    color:#fff;
+    font-size:16px;
+    outline:none;
+  }
+  #nickModal .row{
+    display:flex; gap:10px; margin-top:12px;
+  }
+  #nickModal button{
+    flex:1;
+    padding:10px 12px;
+    border-radius:12px;
+    border:0;
+    font-weight:700;
+    cursor:pointer;
+  }
+  #nickOk{ background:#ffd166; color:#111; }
+  #nickSkip{ background:rgba(255,255,255,.10); color:#e9ecff; }
+</style>
+<div id="nickModalBackdrop" role="dialog" aria-modal="true" aria-label="Zadej nick do TOP10">
+  <div id="nickModal">
+    <h3 id="nickModalTitle">TOP10</h3>
+    <p id="nickModalText">Zadej nick (max 8 znaků):</p>
+    <input id="nickModalInput" type="text" maxlength="8" autocomplete="off" spellcheck="false" />
+    <div class="row">
+      <button id="nickOk" type="button">Uložit</button>
+      <button id="nickSkip" type="button">Přeskočit</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function(){
   function showRequested(){
@@ -318,7 +372,7 @@ canvas{
   function onKey(e){
     var code = e.code || '';
     var key = (e.key || '').toLowerCase();
-    if((code === 'KeyH' || key === 'h') && e.ctrlKey){
+    if((code === 'KeyH' || key === 'h') && e.ctrlKey && e.shiftKey){
       window.__STB_DEV_REQUESTED__ = true;
       showRequested();
       try{ e.preventDefault(); }catch(_){}
@@ -1675,6 +1729,64 @@ function calcAvgSpeedKmh(distanceKm, timeSec){
 }
 
 
+
+// UI modal instead of window.prompt (some browsers block prompt from animation loops)
+function askNickModal(message){
+  return new Promise((resolve)=>{
+    try{
+      const back = document.getElementById('nickModalBackdrop');
+      const title = document.getElementById('nickModalTitle');
+      const text  = document.getElementById('nickModalText');
+      const inp   = document.getElementById('nickModalInput');
+      const ok    = document.getElementById('nickOk');
+      const skip  = document.getElementById('nickSkip');
+
+      if (!back || !inp || !ok || !skip){
+        // fallback (should still work on desktop in most cases)
+        resolve(_normNick(prompt(message || "TOP10! Zadej nick (max 8 znaků):") || ""));
+        return;
+      }
+
+      title.textContent = "TOP10";
+      text.textContent = message || "Zadej nick (max 8 znaků):";
+      inp.value = "";
+      back.style.display = "flex";
+
+      const cleanup = ()=>{
+        back.style.display = "none";
+        ok.onclick = null;
+        skip.onclick = null;
+        inp.onkeydown = null;
+      };
+
+      ok.onclick = ()=>{
+        const nick = _normNick(inp.value || "");
+        cleanup();
+        resolve(nick);
+      };
+      skip.onclick = ()=>{
+        cleanup();
+        resolve("");
+      };
+      inp.onkeydown = (e)=>{
+        if (e.key === "Enter"){
+          e.preventDefault();
+          ok.click();
+        }
+        if (e.key === "Escape"){
+          e.preventDefault();
+          skip.click();
+        }
+      };
+
+      // focus a tick later (ensures visible)
+      setTimeout(()=>{ try{ inp.focus(); }catch(_){ } }, 50);
+    }catch(_){
+      resolve(_normNick(prompt(message || "TOP10! Zadej nick (max 8 znaků):") || ""));
+    }
+  });
+}
+
 // ---------- TOP10 (Firebase / Firestore) ----------
 function _hasFS(){
   return !!(window.STB_DB && window.STB_FS && window.STB_FS.query);
@@ -1837,12 +1949,12 @@ function _kickLBFetch(diff, avgKmh, distKm){
         };
 
         if (qualifies(curS, avgKmh)){
-          const nick = _normNick(prompt("TOP10! Zadej nick (max 8 znaků):") || "");
+          const nick = _normNick(await askNickModal("TOP10! Zadej nick (max 8 znaků):") || "");
           const id = await submitScore('speed', diff, avgKmh, nick);
           state.lbSpeedId = id;
         }
         if (qualifies(curD, distKm)){
-          const nick = _normNick(prompt("TOP10! Zadej nick (max 8 znaků):") || "");
+          const nick = _normNick(await askNickModal("TOP10! Zadej nick (max 8 znaků):") || "");
           const id = await submitScore('dist', diff, distKm, nick);
           state.lbDistId = id;
         }
@@ -1900,6 +2012,11 @@ function handleWin() {
   state.penaltyTime = 0;
   state.lastMilestone = 0;
   state.beersFallSpeed = DIFFICULTY[difficulty].fallSpeed;
+  // Keep developer-mode speedup across rounds (after 100 beers)
+  if (state.devMode){
+    state.beersFallSpeed *= 5;
+    state.acceleration *= 5;
+  }
   state.beerCount = 10;
   beers = [];
   for (let i = 0; i < state.beerCount; i++) beers.push(new BeerSprite(state.beersFallSpeed));
@@ -1908,7 +2025,7 @@ function handleWin() {
 let lastTime = performance.now();
 
 function loop(now) {
-  // DEV MODE activation request from global hotkey (press CTRL+H)
+  // DEV MODE activation request from global hotkey (press CTRL+SHIFT+H)
   try{
     if (window.__STB_DEV_REQUESTED__ && state && !state.devMode){
       state.devMode = true;
@@ -1919,7 +2036,7 @@ function loop(now) {
         const el = document.getElementById('devBadge');
         if (el) el.textContent = 'DEV MODE ✅';
       }catch(_){}
-      try{ console.log('[Save the Beer] DEV MODE activated (CTRL+H)'); }catch(_){}
+      try{ console.log('[Save the Beer] DEV MODE activated (CTRL+SHIFT+H)'); }catch(_){}
     }
   }catch(_){}
 

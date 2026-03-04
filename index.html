@@ -1516,7 +1516,12 @@ function initTouchUI(){
   document.addEventListener('fullscreenchange', ()=>{ setTimeout(syncMenuDiffHitZones, 50); }, {passive:true});
 
   // Stop page scrolling on touch
-  document.addEventListener('touchmove', (e)=>{ e.preventDefault(); }, {passive:false});
+  document.addEventListener('touchmove', (e)=>{
+    // Allow scrolling inside the intro / TOP panels on mobile
+    const card = document.getElementById('introCard');
+    if (card && card.contains(e.target)) return;
+    e.preventDefault();
+  }, {passive:false});
 }
 /* =========================
    Desktop detection: hide touch movement controls (Left/Right + Sprint hint)

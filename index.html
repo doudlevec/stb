@@ -739,16 +739,27 @@ const btnMusic = document.getElementById("btnMusic");
 const btnNextTrack = document.getElementById("btnNextTrack");
 
 const btnLeaderboard = document.getElementById("btnLeaderboard");
-const lbModal = document.getElementById("leaderboardModal");
-const lbCloseBtn = document.getElementById("lbCloseBtn");
-const lbTableSpeed = document.getElementById("lbTableSpeed");
-const lbTableDist  = document.getElementById("lbTableDist");
-const lbDiffBtns = [
-  document.getElementById("lbDiffHobby"),
-  document.getElementById("lbDiffMasters"),
-  document.getElementById("lbDiffProfi"),
-].filter(Boolean);
 
+// NOTE: leaderboard modal HTML is placed AFTER the main script so when this script runs
+// the modal elements may not exist yet. We resolve them lazily when opening the modal.
+let lbModal = null;
+let lbCloseBtn = null;
+let lbTableSpeed = null;
+let lbTableDist  = null;
+let lbDiffBtns = [];
+
+function lbResolveEls(){
+  lbModal = document.getElementById("leaderboardModal");
+  lbCloseBtn = document.getElementById("lbCloseBtn");
+  lbTableSpeed = document.getElementById("lbTableSpeed");
+  lbTableDist  = document.getElementById("lbTableDist");
+  lbDiffBtns = [
+    document.getElementById("lbDiffHobby"),
+    document.getElementById("lbDiffMasters"),
+    document.getElementById("lbDiffProfi"),
+  ].filter(Boolean);
+  return !!lbModal;
+}
 let _lbMenuDiff = 'hobby';
 
 function lbSetActiveDiff(diffKey){
@@ -810,37 +821,49 @@ async function lbLoadForDiff(diffKey){
 }
 
 function lbOpen(){
+  if (!lbModal) lbResolveEls();
   if (!lbModal) return;
-  // otevřít jen z menu (úvodní obrazovka)
-  if (screenPhase !== 'menu') return;
+  // otevřít TOP i když je hra spuštěná z lokálního souboru nebo ještě nejsi přesně ve fázi 'menu'
   lbModal.style.display = 'flex';
-  // použij aktuálně vybranou obtížnost v menu
-  lbLoadForDiff(difficulty || 'hobby');
+  // použij aktuálně zvolenou obtížnost (když není, default hobby)
+  lbLoadForDiff('hobby');
 }
+
+let _lbBound = false;
 
 function lbClose(){
+  if (!lbModal) lbResolveEls();
   if (!lbModal) return;
-  lbModal.style.display = 'none';
+  lbModal.style.display = "none";
 }
 
-if (btnLeaderboard){
-  btnLeaderboard.addEventListener('click', (e)=>{ safePrevent(e); lbOpen(); }, {passive:false});
-  btnLeaderboard.addEventListener('touchstart', (e)=>{ safePrevent(e); lbOpen(); }, {passive:false});
-}
-if (lbCloseBtn){
-  lbCloseBtn.addEventListener('click', (e)=>{ safePrevent(e); lbClose(); }, {passive:false});
-  lbCloseBtn.addEventListener('touchstart', (e)=>{ safePrevent(e); lbClose(); }, {passive:false});
-}
-if (lbModal){
+function lbBindModalOnce(){
+  if (_lbBound) return;
+  if (!lbModal) lbResolveEls();
+  if (!lbModal) return;
+
+  _lbBound = true;
+
+  if (lbCloseBtn){
+    lbCloseBtn.addEventListener('click', (e)=>{ safePrevent(e); lbClose(); }, {passive:false});
+    lbCloseBtn.addEventListener('touchstart', (e)=>{ safePrevent(e); lbClose(); }, {passive:false});
+  }
   // klik mimo kartu zavře
   lbModal.addEventListener('click', (e)=>{
     if (e.target === lbModal) lbClose();
   });
+
+  lbDiffBtns.forEach(btn=>{
+    btn.addEventListener('click', (e)=>{ safePrevent(e); lbLoadForDiff(btn.getAttribute('data-diff')); }, {passive:false});
+    btn.addEventListener('touchstart', (e)=>{ safePrevent(e); lbLoadForDiff(btn.getAttribute('data-diff')); }, {passive:false});
+  });
 }
-lbDiffBtns.forEach(btn=>{
-  btn.addEventListener('click', (e)=>{ safePrevent(e); lbLoadForDiff(btn.getAttribute('data-diff')); }, {passive:false});
-  btn.addEventListener('touchstart', (e)=>{ safePrevent(e); lbLoadForDiff(btn.getAttribute('data-diff')); }, {passive:false});
-});
+
+if (btnLeaderboard){
+  const openFn = (e)=>{ safePrevent(e); lbBindModalOnce(); lbOpen(); };
+  btnLeaderboard.addEventListener('click', openFn, {passive:false});
+  btnLeaderboard.addEventListener('touchstart', openFn, {passive:false});
+}
 
 document.addEventListener('keydown', (e)=>{
   if (e.key === 'Escape' && lbModal && lbModal.style.display === 'flex'){
@@ -2161,8 +2184,16 @@ function drawLBTable(title, rows, highlightId, x, y, w){
   ctx.fillStyle = 'rgba(255,255,255,0.75)';
   const colRank = x + pad;
   const colVal  = x + pad + 26;
-  const colDate = x + Math.floor(w * 0.62);
-  const colNick = x + w - pad;
+
+  // Užší "Hodnota" (≈ 6 znaků), širší "Nick" (≈ 8 znaků)
+  const colNick = x + w - pad;      // pravý okraj (right-aligned)
+  const nickW   = 92;               // prostor pro 8 znaků
+  const dateW   = 64;               // krátké datum DD.MM.YY
+
+  // U pravé tabulky (nejméně km) se může lehce překrývat "Hodnota" a "Datum" → posun datum doprava (bez změny šířky tabulky)
+  const isLeastKm = title.toLowerCase().includes('nejmén');
+  const dateShift = isLeastKm ? 24 : 14; // posun i u leve tabulky o ~2-3 znaky // cca 3–4 znaky
+  const colDate = (colNick - nickW - dateW) + dateShift;
 
   ctx.fillText('#', colRank, y + pad + 26);
   ctx.fillText('Hodnota', colVal, y + pad + 26);
@@ -2189,7 +2220,7 @@ function drawLBTable(title, rows, highlightId, x, y, w){
     ctx.font = isHL ? 'bold 14px Arial' : '14px Arial';
     ctx.fillStyle = isHL ? CLR.red : CLR.white;
 
-    const rank = `${i+1}.`;
+    const rank = (i===0?'🥇':i===1?'🥈':i===2?'🥉':`${i+1}.`);
     const val  = (typeof r.v === 'number') ? r.v.toFixed(typeof r.v === 'number' && title.includes('km/h') ? 1 : 2) : String(r.v);
 
     ctx.fillText(rank, colRank, yy);
@@ -2223,7 +2254,7 @@ function renderFinalLeaderboards(diff, avgKmh, distKm){
   // Draw two tables: one far left, one far right (less overlap with center text)
   const margin = 22;
   const gap = 18;
-  const tableW = Math.min(260, Math.floor((W - margin*2 - gap)/2)); // trochu širší, ale stále se vejde
+  const tableW = Math.min(240, Math.floor((W - margin*2 - gap)/2)); // trochu širší, ale stále se vejde
 
   const xLeft  = margin;
   const xRight = W - margin - tableW;
@@ -2632,36 +2663,117 @@ document.addEventListener('keyup', e => {
   </div>
 </div>
 
-</body>
-</html>
 
+<script>
+// --- DEV shortcuts for leaderboard ---
+// Funguje jen jako vývojářský nástroj. Mazání jde pouze když je otevřené okno TOP tabulek.
 
-if (btnSound){
-  const syncSoundBtn = ()=>{
-    btnSound.textContent = SFX_ENABLED ? '🔊 S' : '🔇 S';
-    btnSound.classList.toggle('active', SFX_ENABLED);
-    btnSound.setAttribute('aria-pressed', String(SFX_ENABLED));
-  };
-  syncSoundBtn();
-  btnSound.addEventListener('click', (e)=>{
-    e.preventDefault();
-    SFX_ENABLED = !SFX_ENABLED;
-    localStorage.setItem('savebeer_sfx', SFX_ENABLED ? '1' : '0');
-    if (SFX_ENABLED) ensureAudio();
-    syncSoundBtn();
-  }, {passive:false});
+async function lbDevGetActiveDiff(){
+  // prefer active button in modal, fallback to global state
+  try{
+    const b = document.querySelector('#leaderboardModal .lbDiffBtn.active');
+    const d = b ? b.getAttribute('data-diff') : null;
+    if (d) return d;
+  }catch(_){}
+  if (typeof _lbMenuDiff === "string" && _lbMenuDiff) return _lbMenuDiff;
+  return "hobby";
 }
 
+async function lbDevClearCurrent(){
+  // musí být otevřené okno TOP
+  const modalEl = document.getElementById("leaderboardModal");
+  if (!modalEl || getComputedStyle(modalEl).display === "none") return;
 
-// Keyboard toggle (M)
-window.addEventListener('keydown', (e)=>{
-  if (e.code === 'KeyM'){
-    SFX_ENABLED = !SFX_ENABLED;
-    localStorage.setItem('savebeer_sfx', SFX_ENABLED ? '1' : '0');
-    if (SFX_ENABLED) ensureAudio();
-    if (typeof btnSound !== 'undefined' && btnSound){
-      btnSound.textContent = SFX_ENABLED ? '🔊 S' : '🔇 S';
-      btnSound.classList.toggle('active', SFX_ENABLED);
+  const diff = await lbDevGetActiveDiff();
+
+  if (!confirm("Smazat TOP tabulky pro obtížnost: " + diff + " ?")) return;
+
+  // Používáme Firebase compat API (stejně jako zbytek hry)
+  const dbCompat = initFirestore();
+  if (!dbCompat){
+    alert("Firebase není dostupný (lokální režim / SDK nenačten).");
+    return;
+  }
+
+  const snap = await dbCompat.collection("stb_leaderboard")
+    .where("diff","==", diff)
+    .get();
+
+  if (!snap || snap.empty){
+    alert("Pro obtížnost " + diff + " není nic ke smazání.");
+    return;
+  }
+
+  const batch = dbCompat.batch();
+  snap.forEach(d => batch.delete(d.ref));
+  await batch.commit();
+
+  alert("TOP tabulky smazány pro: " + diff);
+
+  if (typeof lbLoadForDiff === "function") await lbLoadForDiff(diff);
+}
+
+async function lbDevFillTest(){
+  const dbCompat = initFirestore();
+  if (!dbCompat){
+    alert("Firebase není dostupný (lokální režim / SDK nenačten).");
+    return;
+  }
+  const diff = await lbDevGetActiveDiff();
+  const types = ["speed","dist"]; // dist = nejméně km
+
+  for (let i=0;i<10;i++){
+      const type = types[i%2];
+
+      const value = (type === "speed")
+        ? (5 + Math.random()*4.9) // vždy < 10 km/h
+        : (350 + Math.random()*250) // vždy > 350 km
+      ;
+await dbCompat.collection("stb_leaderboard").add({
+        nick: ("TEST"+(i+1)).slice(0,8),
+        diff,
+        type,
+        v: Number(value),
+        when: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+
+  alert("Testovací TOP data vytvořena");
+
+  const modalEl = document.getElementById("leaderboardModal");
+  if (modalEl && modalEl.style.display !== "none" && typeof lbLoadForDiff === "function"){
+    const diff = await lbDevGetActiveDiff();
+    await lbLoadForDiff(diff);
+  }
+}
+
+document.addEventListener("keydown", async (e) => {
+  const isDelete = (e.code === "Delete" || e.key === "Delete" || e.key === "Del");
+
+  // Levý ALT + Delete -> smazat aktuální obtížnost v TOP okně
+  if (e.altKey && isDelete){
+    e.preventDefault();
+    try{
+      await lbDevClearCurrent();
+    }catch(err){
+      console.error(err);
+      alert("Mazání selhalo. Zkontroluj konzoli a Firestore rules (delete).");
+    }
+    return;
+  }
+
+  // ALT + Insert -> naplnit testovací data
+  if (e.altKey && (e.code === "Insert" || e.key === "Insert")){
+    e.preventDefault();
+    try{
+      await lbDevFillTest();
+    }catch(err){
+      console.error(err);
+      alert("Vytvoření test dat selhalo. Zkontroluj konzoli a Firestore rules (write).");
     }
   }
 });
+</script>
+
+</body>
+</html>

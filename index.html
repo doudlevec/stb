@@ -286,6 +286,9 @@ canvas{
   border-radius: 16px;
   box-shadow: 0 14px 36px rgba(0,0,0,.45);
   padding: 14px 14px 12px;
+
+  touch-action: auto;
+  -webkit-overflow-scrolling: touch;
 }
 #leaderboardModal .lbTop{
   display:flex;
@@ -1517,9 +1520,16 @@ function initTouchUI(){
 
   // Stop page scrolling on touch
   document.addEventListener('touchmove', (e)=>{
-    // Allow scrolling inside the intro / TOP panels on mobile
-    const card = document.getElementById('introCard');
-    if (card && card.contains(e.target)) return;
+    // Allow scrolling inside scrollable UI panels (TOP/leaderboards/intro) on mobile
+    const introCard = document.getElementById('introCard');
+    if (introCard && introCard.contains(e.target)) return;
+
+    const lbModal = document.getElementById('leaderboardModal');
+    if (lbModal){
+      const lbCard = lbModal.querySelector('.lbCard');
+      if (lbCard && lbCard.contains(e.target)) return;
+    }
+
     e.preventDefault();
   }, {passive:false});
 }

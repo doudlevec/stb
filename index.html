@@ -262,6 +262,125 @@ canvas{
   pointer-events:none;
 }
 
+
+/* ===== Leaderboard modal (menu) ===== */
+#leaderboardModal{
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.78);
+  z-index: 2000;
+  padding: 14px;
+}
+#leaderboardModal .lbCard{
+  width: min(920px, 96vw);
+  max-height: min(92vh, 780px);
+  overflow: auto;
+  background: rgba(15,18,32,0.96);
+  color: #e9ecff;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 16px;
+  box-shadow: 0 14px 36px rgba(0,0,0,.45);
+  padding: 14px 14px 12px;
+}
+#leaderboardModal .lbTop{
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+#leaderboardModal .lbTitle{
+  font-weight: 800;
+  letter-spacing: .2px;
+}
+#leaderboardModal .lbClose{
+  border: 1px solid rgba(255,255,255,.16);
+  background: rgba(255,255,255,.08);
+  color: #fff;
+  border-radius: 12px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+#leaderboardModal .lbClose:active{ transform: scale(0.98); }
+
+#leaderboardModal .lbDiffRow{
+  display:flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 6px 0 12px;
+  justify-content: center;
+}
+#leaderboardModal .lbDiffBtn{
+  border: 1px solid rgba(255,255,255,.16);
+  background: rgba(255,255,255,.06);
+  color: #e9ecff;
+  border-radius: 999px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: 700;
+}
+#leaderboardModal .lbDiffBtn.active{
+  background: rgba(255,209,102,.18);
+  border-color: rgba(255,209,102,.35);
+}
+
+#leaderboardModal .lbGrid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 760px){
+  #leaderboardModal .lbGrid{ grid-template-columns: 1fr; }
+}
+
+#leaderboardModal .lbPanel{
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 14px;
+  padding: 10px;
+  background: rgba(255,255,255,.05);
+}
+#leaderboardModal .lbPanel h3{
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+#leaderboardModal table{
+  width:100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+#leaderboardModal th, #leaderboardModal td{
+  padding: 6px 6px;
+  border-bottom: 1px solid rgba(255,255,255,.10);
+  text-align: left;
+  white-space: nowrap;
+}
+#leaderboardModal th{
+  font-size: 12px;
+  opacity: .85;
+  font-weight: 800;
+}
+#leaderboardModal td.num{ text-align: right; font-variant-numeric: tabular-nums; }
+#leaderboardModal td.rank{ width: 34px; opacity: .9; }
+#leaderboardModal .lbMuted{ opacity: .75; font-size: 12px; margin-top: 6px; }
+
+
+/* leaderboard column widths */
+#leaderboardModal table td:nth-child(2),
+#leaderboardModal table th:nth-child(2){
+  width:120px;
+  max-width:120px;
+}
+
+#leaderboardModal table td:nth-child(3),
+#leaderboardModal table th:nth-child(3){
+  width:70px;
+  max-width:70px;
+  text-align:right;
+}
+
 </style>
 
 <!-- Firebase (compat) – pro Firestore online TOP10 -->
@@ -309,6 +428,7 @@ canvas{
       <button id="btnSound" class="touchBtn smallBtn" title="Zvuk" aria-pressed="true">🔊 S</button>
   <button id="btnMusic" class="touchBtn smallBtn" title="Hudba" aria-pressed="true">🎵 M</button>
 <button id="btnNextTrack" class="touchBtn smallBtn" title="Další skladba">N&gt;</button>
+<button id="btnLeaderboard" class="touchBtn smallBtn" title="TOP tabulky">🏆 TOP</button>
 <button class="touchBtn smallBtn" id="btnFullscreen" title="Celá obrazovka">⛶</button>
 
     </div>
@@ -618,6 +738,118 @@ const btnMusic = document.getElementById("btnMusic");
 
 const btnNextTrack = document.getElementById("btnNextTrack");
 
+const btnLeaderboard = document.getElementById("btnLeaderboard");
+const lbModal = document.getElementById("leaderboardModal");
+const lbCloseBtn = document.getElementById("lbCloseBtn");
+const lbTableSpeed = document.getElementById("lbTableSpeed");
+const lbTableDist  = document.getElementById("lbTableDist");
+const lbDiffBtns = [
+  document.getElementById("lbDiffHobby"),
+  document.getElementById("lbDiffMasters"),
+  document.getElementById("lbDiffProfi"),
+].filter(Boolean);
+
+let _lbMenuDiff = 'hobby';
+
+function lbSetActiveDiff(diffKey){
+  _lbMenuDiff = diffKey || 'hobby';
+  lbDiffBtns.forEach(b=>{
+    b.classList.toggle('active', (b.getAttribute('data-diff') === _lbMenuDiff));
+  });
+}
+
+function lbEsc(s){
+  return String(s ?? '').replace(/[&<>"']/g, (c)=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+function renderLBHtmlTable(el, rows, type){
+  if (!el) return;
+  const isDist = (type === 'dist');
+  const head = `
+    <tr>
+      <th class="rank">#</th>
+      <th>Nick</th>
+      <th class="num">${isDist ? 'Km' : 'Km/h'}</th>
+      <th>Datum</th>
+    </tr>`;
+  if (!rows || !rows.length){
+    el.innerHTML = head + `<tr><td colspan="4" class="lbMuted">Zatím žádné záznamy.</td></tr>`;
+    return;
+  }
+  const body = rows.map((r, i)=>{
+    const when = r && r.when ? new Date(r.when) : new Date();
+    const ds = isFinite(when.getTime()) ? when.toLocaleDateString('cs-CZ') : '';
+    return `
+      <tr>
+        <td class="rank">${i+1}.</td>
+        <td>${lbEsc((r && r.nick) ? String(r.nick).slice(0,8) : '')}</td>
+        <td class="num">${lbEsc(fmtVal(type, r && r.v))}</td>
+        <td>${lbEsc(ds)}</td>
+      </tr>`;
+  }).join('');
+  el.innerHTML = head + body;
+}
+
+async function lbLoadForDiff(diffKey){
+  lbSetActiveDiff(diffKey);
+  // placeholders
+  if (lbTableSpeed) lbTableSpeed.innerHTML = '<tr><td>Načítám…</td></tr>';
+  if (lbTableDist)  lbTableDist.innerHTML  = '<tr><td>Načítám…</td></tr>';
+
+  try{
+    const [speedRows, distRows] = await Promise.all([
+      fsGetTop10('speed', _lbMenuDiff),
+      fsGetTop10('dist',  _lbMenuDiff),
+    ]);
+    renderLBHtmlTable(lbTableSpeed, speedRows || [], 'speed');
+    renderLBHtmlTable(lbTableDist,  distRows  || [], 'dist');
+  }catch(e){
+    if (lbTableSpeed) lbTableSpeed.innerHTML = '<tr><td>Chyba načítání.</td></tr>';
+    if (lbTableDist)  lbTableDist.innerHTML  = '<tr><td>Chyba načítání.</td></tr>';
+  }
+}
+
+function lbOpen(){
+  if (!lbModal) return;
+  // otevřít jen z menu (úvodní obrazovka)
+  if (screenPhase !== 'menu') return;
+  lbModal.style.display = 'flex';
+  // použij aktuálně vybranou obtížnost v menu
+  lbLoadForDiff(difficulty || 'hobby');
+}
+
+function lbClose(){
+  if (!lbModal) return;
+  lbModal.style.display = 'none';
+}
+
+if (btnLeaderboard){
+  btnLeaderboard.addEventListener('click', (e)=>{ safePrevent(e); lbOpen(); }, {passive:false});
+  btnLeaderboard.addEventListener('touchstart', (e)=>{ safePrevent(e); lbOpen(); }, {passive:false});
+}
+if (lbCloseBtn){
+  lbCloseBtn.addEventListener('click', (e)=>{ safePrevent(e); lbClose(); }, {passive:false});
+  lbCloseBtn.addEventListener('touchstart', (e)=>{ safePrevent(e); lbClose(); }, {passive:false});
+}
+if (lbModal){
+  // klik mimo kartu zavře
+  lbModal.addEventListener('click', (e)=>{
+    if (e.target === lbModal) lbClose();
+  });
+}
+lbDiffBtns.forEach(btn=>{
+  btn.addEventListener('click', (e)=>{ safePrevent(e); lbLoadForDiff(btn.getAttribute('data-diff')); }, {passive:false});
+  btn.addEventListener('touchstart', (e)=>{ safePrevent(e); lbLoadForDiff(btn.getAttribute('data-diff')); }, {passive:false});
+});
+
+document.addEventListener('keydown', (e)=>{
+  if (e.key === 'Escape' && lbModal && lbModal.style.display === 'flex'){
+    lbClose();
+  }
+});
+
+
+
 function nextBGMTrack(){
   const a = ensureBGM();
   if (!a) return;
@@ -887,6 +1119,7 @@ const CLR = {
 // State
 let state = { totalCost: 0, totalRideSeconds: 0, lastDistanceAtRoundStart: 0, lastRoundTime: 0, lastRoundDistance: 0, endTimeSec: 0, endDistance: 0 };
 let keys = {};
+let altLeftDown = false; // for Left ALT + E dev-warp
 /* ===== Touch / Mobile UI ===== */
 function safePrevent(e){ try{ e.preventDefault(); }catch(_){} }
 
@@ -961,7 +1194,9 @@ function bindHoldButtonWithDoubleTap(btnId, key){
   if(!btn) return;
   const down = (e)=>{
     safePrevent(e);
-    _devTap(key);
+    // Menu dev-warp sequence uses LEFT/RIGHT buttons on the difficulty screen
+    if (screenPhase === 'menu') menuDevTap(key);
+    else _devTap(key);
     const now = performance.now();
     if (_lastDownByBtn[btnId] && (now - _lastDownByBtn[btnId]) < DOUBLE_TAP_MS){
       _startSprintFrom(btnId);
@@ -1075,6 +1310,14 @@ function updateDiffUI(){
     overlay.style.display = inMenu ? 'block' : 'none';
     if (inMenu) { syncMenuDiffHitZones(); }
   }
+
+  // Menu-only button: show current TOP tables
+  const btnLb = document.getElementById('btnLeaderboard');
+  if (btnLb){
+    btnLb.style.display = inMenu ? 'inline-flex' : 'none';
+    btnLb.disabled = !inMenu;
+    btnLb.setAttribute('aria-disabled', inMenu ? 'false' : 'true');
+  }
 }
 
 // Keep the difficulty hit-zones perfectly aligned with the canvas menu,
@@ -1132,6 +1375,98 @@ function startWithDifficulty(diffKey){
   updateDiffUI();
   biker = new Biker();
   newGame();
+}
+
+// =========================
+// Developer warp (test mode)
+// - Starts the game immediately in Profi
+// - Teleports to a late-game state so you can test TOP10 + Firestore
+// Requested state:
+//   - after 3 rounds
+//   - brewery account: 24 700 Kč
+//   - distance: 300 km
+//   - total time: 30 hours (game time)
+// Activation:
+//   - Mobile (menu screen): LEFT x3, then RIGHT x3
+//   - PC (menu screen): Left ALT + E
+// =========================
+function startDevWarp(){
+  try{
+    // Must be activated from menu
+    if (screenPhase !== 'menu') return;
+
+    difficulty = 'profi';
+    updateDiffUI();
+    biker = new Biker();
+    newGame();
+
+    // Teleport values
+    state.totalCost = 24700;
+    biker.distance = 300;
+    biker.lastX = biker.x + biker.w/2;
+
+    // 30 hours total game time:
+    // 1 real second = 1 game minute -> 30h = 1800 game minutes -> 1800 real seconds
+    state.totalRideSeconds = 1800;
+    state.lastDistanceAtRoundStart = biker.distance;
+
+    // Start current round from "now"
+    state.startTime = performance.now();
+    totalPauseTime = 0;
+    paused = false;
+
+    // Mark as warp (does NOT enable the 10x speed devMode)
+    state.devWarp = true;
+  }catch(_){
+    // no-op
+  }
+}
+
+// Menu-only secret sequence (touch arrows): LEFT x3 then RIGHT x3
+const MENU_DEV_SEQ = { stage: 0, left: 0, right: 0, lastTap: 0 };
+function menuDevTap(dirKey){
+  if (screenPhase !== 'menu') return;
+  const now = performance.now();
+
+  // "hned" = keep sequence tight; reset if user waits too long
+  if (MENU_DEV_SEQ.lastTap && (now - MENU_DEV_SEQ.lastTap) > 900){
+    MENU_DEV_SEQ.stage = 0;
+    MENU_DEV_SEQ.left = 0;
+    MENU_DEV_SEQ.right = 0;
+  }
+  MENU_DEV_SEQ.lastTap = now;
+
+  if (MENU_DEV_SEQ.stage === 0){
+    if (dirKey === 'ArrowLeft'){
+      MENU_DEV_SEQ.left += 1;
+      if (MENU_DEV_SEQ.left >= 3){
+        MENU_DEV_SEQ.stage = 1;
+        MENU_DEV_SEQ.right = 0;
+      }
+    } else {
+      // wrong direction resets
+      MENU_DEV_SEQ.left = 0;
+    }
+    return;
+  }
+
+  if (MENU_DEV_SEQ.stage === 1){
+    if (dirKey === 'ArrowRight'){
+      MENU_DEV_SEQ.right += 1;
+      if (MENU_DEV_SEQ.right >= 3){
+        // activate
+        MENU_DEV_SEQ.stage = 0;
+        MENU_DEV_SEQ.left = 0;
+        MENU_DEV_SEQ.right = 0;
+        startDevWarp();
+      }
+    } else {
+      // wrong direction resets
+      MENU_DEV_SEQ.stage = 0;
+      MENU_DEV_SEQ.left = 0;
+      MENU_DEV_SEQ.right = 0;
+    }
+  }
 }
 
 function initTouchUI(){
@@ -2202,6 +2537,14 @@ function drawHUD() {
 // Keyboard
 document.addEventListener('keydown', e => {
   keys[e.key] = true;
+  if (e.code === 'AltLeft') altLeftDown = true;
+
+  // PC dev-warp activation from menu: Left ALT + E
+  if (screenPhase === 'menu' && e.code === 'KeyE' && altLeftDown && !e.repeat) {
+    e.preventDefault();
+    startDevWarp();
+    return;
+  }
   if (screenPhase === 'menu') {
     if (e.key === '1') { difficulty = 'hobby';   biker = new Biker(); newGame(); }
     if (e.key === '2') { difficulty = 'masters';  biker = new Biker(); newGame(); }
@@ -2253,8 +2596,42 @@ if (e.key === ' ' && e.type === 'keydown' && !e.repeat){
 
   if (['ArrowLeft','ArrowRight'].includes(e.key)) e.preventDefault();
 });
-document.addEventListener('keyup', e => { keys[e.key] = false; });
+document.addEventListener('keyup', e => {
+  keys[e.key] = false;
+  if (e.code === 'AltLeft') altLeftDown = false;
+});
 </script>
+
+<!-- Leaderboard Modal (menu) -->
+<div id="leaderboardModal" role="dialog" aria-modal="true" aria-label="TOP tabulky">
+  <div class="lbCard">
+    <div class="lbTop">
+      <div class="lbTitle">🏆 TOP tabulky</div>
+      <button class="lbClose" id="lbCloseBtn" aria-label="Zavřít">✖ Zavřít</button>
+    </div>
+
+    <div class="lbDiffRow" aria-label="Filtr obtížnosti">
+      <button class="lbDiffBtn" id="lbDiffHobby" data-diff="hobby">🚴 Hobby</button>
+      <button class="lbDiffBtn" id="lbDiffMasters" data-diff="masters">🚵 Masters</button>
+      <button class="lbDiffBtn" id="lbDiffProfi" data-diff="profi">🏁 Profi</button>
+    </div>
+
+    <div class="lbGrid">
+      <div class="lbPanel">
+        <h3>⚡ Nejvyšší průměrná rychlost (km/h)</h3>
+        <table id="lbTableSpeed"></table>
+      </div>
+
+      <div class="lbPanel">
+        <h3>🚴 Nejméně najetých km</h3>
+        <table id="lbTableDist"></table>
+      </div>
+    </div>
+
+    <div class="lbMuted">Tip: Tabulky jsou z Firestore a načtou se vždy aktuálně.</div>
+  </div>
+</div>
+
 </body>
 </html>
 
